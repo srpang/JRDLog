@@ -22,32 +22,24 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <dirent.h>
 #include <errno.h>
 #include <string.h>
 #include <linux/if.h>
-#include <resolv_netid.h>
-
 #include <inttypes.h>
-
 #include <cutils/log.h>
 #include <netutils/ifc.h>
 #include <sysutils/SocketClient.h>
 
 #include "CommandListener.h"
+#include "ResponseCode.h"
 
-
-#include <string>
-#include <vector>
+MobileLogController *CommandListener::sMobileLogCtrl = NULL;
 
 CommandListener::CommandListener() :
                  FrameworkListener("jrdlogd", true) {
     registerCmd(new MobileLogCommand("mobilelog"));
-	if (!sMobileLogCtrl)
+    if (!sMobileLogCtrl)
         sMobileLogCtrl = new MobileLogController();
-		
 }
 
 CommandListener::MobileLogCommand::MobileLogCommand(const char *cmd) :
@@ -63,14 +55,14 @@ int CommandListener::MobileLogCommand::runCommand(SocketClient *cli,
         return 0;
     }
 
-	if (!strcmp(argv[1], "stop")) {	
-		rc = sMobileLogCtrl->stopMobileLogging();
-	} else if (!strcmp(argv[1], "start")) {
-		rc = sMobileLogCtrl->startMobileLogging();
-	} else {
+    if (!strcmp(argv[1], "stop")) {    
+        rc = sMobileLogCtrl->stopMobileLogging();
+    } else if (!strcmp(argv[1], "start")) {
+        rc = sMobileLogCtrl->startMobileLogging();
+    } else {
         cli->sendMsg(ResponseCode::CommandSyntaxError, "Unknown mobilelog cmd", false);
-		return 0;
-	}
+        return 0;
+    }
 
     if (!rc) {
         cli->sendMsg(ResponseCode::CommandOkay, "Mobilelog operation succeeded", false);

@@ -3,13 +3,19 @@
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES:= logcat.cpp event.logtags
+LOCAL_SRC_FILES:= \
+             jrdlogd.cpp \
+             CommandListener.cpp \
+             MobileLogController.cpp \
+             event.logtags \
 
-LOCAL_SHARED_LIBRARIES := liblog
+LOCAL_SHARED_LIBRARIES := \
+                  liblog \
+                  libsysutils \
 
-LOCAL_MODULE := logcat
+LOCAL_MODULE := jrd_log_d
 
-LOCAL_CFLAGS := -Werror
+LOCAL_CPPFLAGS := -std=c++11 -Wall -Werror
 
 include $(BUILD_EXECUTABLE)
 

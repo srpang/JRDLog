@@ -14,25 +14,37 @@
  * limitations under the License.
  */
 
-#ifndef _MOBILELOG_CONTROLLER_H
-#define _MOBILELOG_CONTROLLER_H
-
 #include <log/logger.h>
 #include <log/logd.h>
 #include <log/logprint.h>
 #include <log/event_tag_map.h>
 #include <cutils/sockets.h>
 
-#define LOG_TRIGGER_WATERLEVEL 10000
-enum DeviceType {
-    main=0,
-    system,
-    radio,
-    events,
-    maxDevType,
-};
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <time.h>
+#include <errno.h>
+#include <assert.h>
+#include <ctype.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <arpa/inet.h>
+#include <cutils/properties.h>
 
-#define MAX_LOG_TYPE maxDevType;
+#define LOG_TRIGGER_WATERLEVEL 10000
+typedef enum {
+    DEV_MAIN=0,
+    DEV_SYSTEM,
+    DEV_RADIO,
+    DEV_EVENTS,
+    DEV_MAXTYPE,
+} DeviceType;
+
+#define MAX_DEV_LOG_TYPE DEV_MAXTYPE
 
 struct queued_entry_t {
     union {
@@ -90,51 +102,27 @@ struct log_device_t {
 };
 
 class MobileLogController {
-private:
-	static JrdLogcat *sJrdLogcatCtrl;
-
-	char deviceArray[] = {"main", "system", "radio", "events"};
-	char logdir[255];
-	pid_t mLoggingPid;
-	int   mLoggingFd;
-
 public:
-
-    MobileLogController();
-    virtual ~MobileLogController();
-
-	bool setMobileLogPath();
-
-	bool startMobileLogging();
-	bool stopMobileLogging();
-
-private:
-	void setDevices();
-	bool openDevices();
-	bool closeDevices();
-	bool setupOutput();
-	bool clearOutput();
-
-    class JrdLogcat {
+	class JrdLogcat {
     public:
+        static const char* logArray[];
 		log_device_t* devices = NULL;
 		AndroidLogFormat * g_logformat;
 		EventTagMap* g_eventTagMap = NULL;
 		
 		int g_devCount;
-		char logArray[] = {"main_log", "sys_log", "radio_log", "events_log"};
-		char * g_outputFileName[MAX_LOG_TYPE];
-		int g_logRotateSizeKBytes[MAX_LOG_TYPE];
-		int g_maxRotatedLogs[MAX_LOG_TYPE];
+		char * g_outputFileName[MAX_DEV_LOG_TYPE];
+		int g_logRotateSizeKBytes[MAX_DEV_LOG_TYPE];
+		int g_maxRotatedLogs[MAX_DEV_LOG_TYPE];
 
-		int g_outFD[MAX_LOG_TYPE] = {-1};
-		off_t g_outByteCount[MAX_LOG_TYPE] = 0;
+		int g_outFD[MAX_DEV_LOG_TYPE] = {-1};
+		off_t g_outByteCount[MAX_DEV_LOG_TYPE] = {0};
 
         JrdLogcat();
         virtual ~JrdLogcat() {}
 		
-		bool start();
-		bool stop();
+		void start();
+		void stop();
 
 	private:
 		int entry_num = 0;
@@ -148,10 +136,38 @@ private:
 		void constructEntry(queued_entry_t* entry);
 		void trigger_log(log_device_t *dev);
 		void maybePrintStart(log_device_t *dev);
+		void printNextEntry(log_device_t* dev);
+		void processBuffer(log_device_t* dev, logger_entry *buf);
 		void rotateLogs(int dev_log);
 		void skipNextEntry(log_device_t* dev);
+		int openLogFile (char *pathname);
 			
     };
-};
+private:
 
-#endif
+	static JrdLogcat* sJrdLogcatCtrl;
+
+	static const char* deviceArray[];
+	pid_t mLoggingPid;
+	int   mLoggingFd;
+
+public:
+
+    MobileLogController();
+    virtual ~MobileLogController();
+
+	bool setMobileLogPath();
+	bool isLoggingStarted();
+	bool startMobileLogging();
+	bool stopMobileLogging();
+
+private:
+	bool setDevices();
+	bool openDevices();
+	void closeDevices();
+	bool setupOutput();
+	void clearOutput();
+	int openLogFile (char *pathname);
+
+
+};

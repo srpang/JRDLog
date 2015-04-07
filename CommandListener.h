@@ -21,8 +21,7 @@
 #define _COMMANDLISTENER_H__
 
 #include <sysutils/FrameworkListener.h>
-
-#include "NetdCommand.h"
+#include "MobileLogController.h"
 
 class CommandListener : public FrameworkListener {
 

@@ -21,7 +21,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <log/event_tag_map.h>
-#include <logwrap/logwrap.h>
 #include <netinet/in.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -37,10 +36,14 @@
 #define DEFAULT_LOG_ROTATE_SIZE_KBYTES 10240
 #define DEFAULT_MAX_ROTATED_LOGS 4
 
+
+const char * MobileLogController::deviceArray[] = {"main", "system", "radio", "events"};
+const char * MobileLogController::JrdLogcat::logArray[] = {"main_log", "sys_log", "radio_log", "events_log"};
+
+MobileLogController::JrdLogcat* MobileLogController::sJrdLogcatCtrl = NULL;
+
 MobileLogController::MobileLogController() {
     sJrdLogcatCtrl = new JrdLogcat();
-    memset(logdir, 0, sizeof(logdir));
-    strcpy(logdir, LOG_FILE_DIR);
 }
 
 MobileLogController::~MobileLogController() {
@@ -58,8 +61,9 @@ bool MobileLogController::startMobileLogging() {
     }
 
 	ALOGD("Starting MobileLogging");
-    if (sJrdLogcatCtrl.devices == NULL) {
-        setDevices();
+    if (sJrdLogcatCtrl->devices == NULL) {
+        if (!setDevices())
+            return false;
     }
 
     if (!openDevices())
@@ -105,7 +109,7 @@ bool MobileLogController::startMobileLogging() {
 		return true;
     }
 
-	
+    return true;
 }
 
 bool MobileLogController::stopMobileLogging() {
@@ -129,18 +133,19 @@ bool MobileLogController::stopMobileLogging() {
 }
 
 bool MobileLogController::isLoggingStarted() {
-
+    //fix me
+    return false;
 }
 
-void MobileLogController::setDevices() {
+bool MobileLogController::setDevices() {
     int i = 0;
     int arry_size = sizeof(deviceArray) / sizeof(deviceArray[0]);
     log_device_t* dev;
     bool needBinary = false;
 
-    if (arry_size > maxDevType) {
-        perror ("device number is not right");
-        exit(-1);
+    if (arry_size > MAX_DEV_LOG_TYPE) {
+        ALOGE ("device number is not right");
+        return false;
     }
 
     for (i=0; i<arry_size; i++) {
@@ -150,20 +155,22 @@ void MobileLogController::setDevices() {
 
         needBinary = strcmp(deviceArray[i], "events") == 0;
 
-        if (sJrdLogcatCtrl.devices) {
-            dev = sJrdLogcatCtrl.devices;
+        if (sJrdLogcatCtrl->devices) {
+            dev = sJrdLogcatCtrl->devices;
             while (dev->next) {
                 dev = dev->next;
             }
-            dev->next = new log_device_t(buf, needBinary, * (deviceArray[i] + 0), i);
+            dev->next = new log_device_t(buf, needBinary, * (deviceArray[i] + 0), (DeviceType)i);
         } else {
-            sJrdLogcatCtrl.devices = new log_device_t(buf, needBinary, * (deviceArray[i] + 0), i);
+            sJrdLogcatCtrl->devices = new log_device_t(buf, needBinary, * (deviceArray[i] + 0), (DeviceType)i);
         }
-        sJrdLogcatCtrl.g_devCount++;
+        sJrdLogcatCtrl->g_devCount++;
     }
 
     if (needBinary)
-        sJrdLogcatCtrl.g_eventTagMap = android_openEventTagMap(EVENT_TAG_MAP_FILE);
+        sJrdLogcatCtrl->g_eventTagMap = android_openEventTagMap(EVENT_TAG_MAP_FILE);
+
+    return true;
 
 }
 
@@ -171,7 +178,7 @@ bool MobileLogController::openDevices() {
     log_device_t* dev;
     int mode = O_RDONLY;
 
-    dev = sJrdLogcatCtrl.devices;
+    dev = sJrdLogcatCtrl->devices;
     while (dev) {
         dev->fd = open(dev->device, mode);
         if (dev->fd < 0) {
@@ -186,7 +193,7 @@ bool MobileLogController::openDevices() {
 
 void MobileLogController::closeDevices() {
 	log_device_t* dev;
-    dev = sJrdLogcatCtrl.devices;
+    dev = sJrdLogcatCtrl->devices;
     while (dev) {
         if (dev->fd > 0) {
             close(dev->fd);
@@ -201,52 +208,53 @@ bool MobileLogController::setupOutput() {
     int index;
     strftime(date, sizeof(date), "%Y_%m%d_%H_%M_%S", localtime(&now));
 
-	for (index=0; index<maxDevType; index++) {
+	for (index=0; index<MAX_DEV_LOG_TYPE; index++) {
 		char* buf = (char*) malloc(strlen(LOG_FILE_DIR) + strlen("/APLog_") + strlen(date) + strlen("/")
-		                                                + strlen(sJrdLogcatCtrl.logArray[i]) + 1);
+		                                                + strlen(sJrdLogcatCtrl->logArray[index]) + 1);
 		strcpy(buf, LOG_FILE_DIR);
 		strcat(buf, "/APLog_");
 		strcat(buf, date);
 		strcat(buf, "/");
-		strcat(buf, sJrdLogcatCtrl.logArray[i]);
+		strcat(buf, sJrdLogcatCtrl->logArray[index]);
 
-		sJrdLogcatCtrl.g_outputFileName[index] = buf;
+		sJrdLogcatCtrl->g_outputFileName[index] = buf;
 
-	    sJrdLogcatCtrl.g_outFD[index] = openLogFile (sJrdLogcatCtrl.g_outputFileName[index]);
+	    sJrdLogcatCtrl->g_outFD[index] = openLogFile (sJrdLogcatCtrl->g_outputFileName[index]);
 
-	    if (sJrdLogcatCtrl.g_outFD[index] < 0) {
+	    if (sJrdLogcatCtrl->g_outFD[index] < 0) {
 	        perror ("couldn't open output file");
 	        return false;
 	    }
 
-	    fstat(sJrdLogcatCtrl.g_outFD[index], &statbuf);
+	    fstat(sJrdLogcatCtrl->g_outFD[index], &statbuf);
 
-	    sJrdLogcatCtrl.g_outByteCount[index] = statbuf.st_size;
+	    sJrdLogcatCtrl->g_outByteCount[index] = statbuf.st_size;
 		
 	}
 
+    return true;
 }
 
 void MobileLogController::clearOutput() {
 	int index;
 
-	for (index=0; index<maxDevType; index++) {
-		free(sJrdLogcatCtrl.g_outputFileName[index]);
-		sJrdLogcatCtrl.g_outputFileName[index] = NULL;
-		close(sJrdLogcatCtrl.g_outFD[index]);
-		sJrdLogcatCtrl.g_outFD[index] = -1;
-		sJrdLogcatCtrl.g_outByteCount[index] = 0;
+	for (index=0; index<MAX_DEV_LOG_TYPE; index++) {
+		free(sJrdLogcatCtrl->g_outputFileName[index]);
+		sJrdLogcatCtrl->g_outputFileName[index] = NULL;
+		close(sJrdLogcatCtrl->g_outFD[index]);
+		sJrdLogcatCtrl->g_outFD[index] = -1;
+		sJrdLogcatCtrl->g_outByteCount[index] = 0;
 	}
 }
 
-int MobileLogController::openLogFile (const char *pathname) {
+int MobileLogController::openLogFile (char *pathname) {
     return open(pathname, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
 }
 
 MobileLogController::JrdLogcat::JrdLogcat(){
 	int index;
 	
-	for (index=0; index<maxDevType; index++) {
+	for (index=0; index<MAX_DEV_LOG_TYPE; index++) {
 	    g_logRotateSizeKBytes[index] = DEFAULT_LOG_ROTATE_SIZE_KBYTES;
 	    g_maxRotatedLogs[index] = DEFAULT_MAX_ROTATED_LOGS;
 	    g_outputFileName[index] = NULL;
@@ -256,11 +264,11 @@ MobileLogController::JrdLogcat::JrdLogcat(){
     g_logformat = android_log_format_new();
 }
 
-bool MobileLogController::JrdLogcat::start() {
+void MobileLogController::JrdLogcat::start() {
     readLogLines(devices);
 }
 
-bool MobileLogController::JrdLogcat::stop() {
+void MobileLogController::JrdLogcat::stop() {
 
 }
 
@@ -372,6 +380,11 @@ void MobileLogController::JrdLogcat::chooseFirst(log_device_t* dev, log_device_t
     }
 }
 
+int MobileLogController::JrdLogcat::openLogFile (char *pathname) {
+    return open(pathname, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
+}
+
+
 void MobileLogController::JrdLogcat::rotateLogs(int dev_log)
 {
     int err;
@@ -404,7 +417,7 @@ void MobileLogController::JrdLogcat::rotateLogs(int dev_log)
         free(file0);
     }
 
-    g_outFD[dev_log] = openLogFile (g_outputFileName[dev_log]);
+    g_outFD[dev_log] = openLogFile(g_outputFileName[dev_log]);
 
     if (g_outFD[dev_log] < 0) {
         perror ("couldn't open output file");
@@ -426,7 +439,7 @@ void MobileLogController::JrdLogcat::skipNextEntry(log_device_t* dev) {
     }
 }
 
-void MobileLogController::JrdLogcat::processBuffer(log_device_t* dev, struct logger_entry *buf)
+void MobileLogController::JrdLogcat::processBuffer(log_device_t* dev, logger_entry *buf)
 {
     int bytesWritten = 0;
     int err;
@@ -468,7 +481,7 @@ void MobileLogController::JrdLogcat::processBuffer(log_device_t* dev, struct log
     g_outByteCount[index] += bytesWritten;
 
     if (g_logRotateSizeKBytes[index] > 0 && (g_outByteCount[index] / 1024) >= g_logRotateSizeKBytes[index]) {
-        rotateLogs();
+        rotateLogs(index);
     }
 
 error:

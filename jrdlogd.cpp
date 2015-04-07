@@ -1,30 +1,30 @@
 // Copyright 2006-2014 The Android Open Source Project
 
-#include <assert.h>
-#include <ctype.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdarg.h>
+#include <signal.h>
+#include <errno.h>
 #include <string.h>
 #include <signal.h>
-#include <time.h>
-#include <unistd.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
-#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
+#include <fcntl.h>
+#include <dirent.h>
+
+#include "cutils/log.h"
+
+#include "CommandListener.h"
 
 
 int main()
 {
-	int sock;
-	CommandListener *cl;
+    CommandListener *cl;
 
     signal(SIGPIPE, exit);
 
-	cl = new CommandListener();
+    cl = new CommandListener();
 
     /*
      * Now that we're up, we can respond to commands
