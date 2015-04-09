@@ -46,58 +46,24 @@ typedef enum {
 
 #define MAX_DEV_LOG_TYPE DEV_MAXTYPE
 
-struct queued_entry_t {
-    union {
-        unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1] __attribute__((aligned(4)));
-        struct logger_entry entry __attribute__((aligned(4)));
-    };
-    queued_entry_t* next;
-
-    queued_entry_t() {
-        next = NULL;
-    }
-};
-
-static int cmp(queued_entry_t* a, queued_entry_t* b) {
-    int n = a->entry.sec - b->entry.sec;
-    if (n != 0) {
-        return n;
-    }
-    return a->entry.nsec - b->entry.nsec;
-}
-
 struct log_device_t {
-    char* device;
+    const char* device;
     bool binary;
-    int fd;
+    struct logger *logger;
+    struct logger_list *logger_list;
     bool printed;
     char label;
 	DeviceType devType;
 
-    queued_entry_t* queue;
     log_device_t* next;
 
-    log_device_t(char* d, bool b, char l, DeviceType index) {
+    log_device_t(const char* d, bool b, char l, DeviceType index) {
         device = d;
         binary = b;
         label = l;
 		devType = index;
-        queue = NULL;
         next = NULL;
         printed = false;
-    }
-
-    void enqueue(queued_entry_t* entry) {
-        if (this->queue == NULL) {
-            this->queue = entry;
-        } else {
-            queued_entry_t** e = &this->queue;
-            while (*e && cmp(entry, *e) >= 0) {
-                e = &((*e)->next);
-            }
-            entry->next = *e;
-            *e = entry;
-        }
     }
 };
 
@@ -109,7 +75,8 @@ public:
 		log_device_t* devices = NULL;
 		AndroidLogFormat * g_logformat;
 		EventTagMap* g_eventTagMap = NULL;
-		
+
+		struct logger_list *logger_list;
 		int g_devCount;
 		char * g_outputFileName[MAX_DEV_LOG_TYPE];
 		int g_logRotateSizeKBytes[MAX_DEV_LOG_TYPE];
@@ -125,28 +92,21 @@ public:
 		void stop();
 
 	private:
-		int entry_num = 0;
-		bool entry_too_much = false;
 
         int setLogFormat(const char * formatString);
 
 		void readLogLines(log_device_t* devices);
 		
-		void chooseFirst(log_device_t* dev, log_device_t** firstdev);
-		void constructEntry(queued_entry_t* entry);
+
 		void trigger_log(log_device_t *dev);
 		void maybePrintStart(log_device_t *dev);
-		void printNextEntry(log_device_t* dev);
-		void processBuffer(log_device_t* dev, logger_entry *buf);
+		void processBuffer(log_device_t* dev, struct log_msg *buf);
 		void rotateLogs(int dev_log);
-		void skipNextEntry(log_device_t* dev);
 		int openLogFile (char *pathname);
-			
     };
 private:
 
 	static JrdLogcat* sJrdLogcatCtrl;
-
 	static const char* deviceArray[];
 	pid_t mLoggingPid;
 	int   mLoggingFd;

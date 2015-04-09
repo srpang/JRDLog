@@ -31,7 +31,7 @@
 
 #include "MobileLogController.h"
 
-#define LOG_DEVICE_DIR  "/dev/log/"
+#define LOG_DEVICE_DIR  ""
 #define LOG_FILE_DIR    "/storage/sdcard0/jrdlog/mobilelog"
 #define DEFAULT_LOG_ROTATE_SIZE_KBYTES 10240
 #define DEFAULT_MAX_ROTATED_LOGS 4
@@ -176,29 +176,35 @@ bool MobileLogController::setDevices() {
 
 bool MobileLogController::openDevices() {
     log_device_t* dev;
-    int mode = O_RDONLY;
-
     dev = sJrdLogcatCtrl->devices;
+    int mode = O_RDONLY;
+    log_time tail_time(log_time::EPOCH);
+    unsigned int tail_lines = 0;
+
+    if (tail_time != log_time::EPOCH) {
+        sJrdLogcatCtrl->logger_list = android_logger_list_alloc_time(mode, tail_time, 0);
+    } else {
+        sJrdLogcatCtrl->logger_list = android_logger_list_alloc(mode, tail_lines, 0);
+    }
     while (dev) {
-        dev->fd = open(dev->device, mode);
-        if (dev->fd < 0) {
-            fprintf(stderr, "Unable to open log device '%s': %s\n",
-                dev->device, strerror(errno));
+        dev->logger_list = sJrdLogcatCtrl->logger_list;
+        dev->logger = android_logger_open(sJrdLogcatCtrl->logger_list,
+                                          android_name_to_log_id(dev->device));
+        if (!dev->logger) {
+            fprintf(stderr, "Unable to open log device '%s'\n", dev->device);
             return false;
         }
+
+        dev = dev->next;
     }
 
     return true;
 }
 
 void MobileLogController::closeDevices() {
-	log_device_t* dev;
-    dev = sJrdLogcatCtrl->devices;
-    while (dev) {
-        if (dev->fd > 0) {
-            close(dev->fd);
-			dev->fd = -1;
-        }
+    if (sJrdLogcatCtrl->logger_list != NULL) {
+        android_logger_list_free(sJrdLogcatCtrl->logger_list);
+        sJrdLogcatCtrl->logger_list = NULL;
     }
 }
 bool MobileLogController::setupOutput() {
@@ -239,10 +245,16 @@ void MobileLogController::clearOutput() {
 	int index;
 
 	for (index=0; index<MAX_DEV_LOG_TYPE; index++) {
-		free(sJrdLogcatCtrl->g_outputFileName[index]);
-		sJrdLogcatCtrl->g_outputFileName[index] = NULL;
-		close(sJrdLogcatCtrl->g_outFD[index]);
-		sJrdLogcatCtrl->g_outFD[index] = -1;
+        if (sJrdLogcatCtrl->g_outputFileName[index] != NULL) {
+		    free(sJrdLogcatCtrl->g_outputFileName[index]);
+            sJrdLogcatCtrl->g_outputFileName[index] = NULL;
+        }
+
+        if (sJrdLogcatCtrl->g_outFD[index] != -1) {
+    		close(sJrdLogcatCtrl->g_outFD[index]);
+            sJrdLogcatCtrl->g_outFD[index] = -1;
+        }
+
 		sJrdLogcatCtrl->g_outByteCount[index] = 0;
 	}
 }
@@ -260,16 +272,37 @@ MobileLogController::JrdLogcat::JrdLogcat(){
 	    g_outputFileName[index] = NULL;
 	}
 
+    logger_list = NULL;
     g_devCount = 0;
     g_logformat = android_log_format_new();
 }
 
 void MobileLogController::JrdLogcat::start() {
+    int err = setLogFormat ("time");
+    if (err < 0) {
+        fprintf(stderr,"Invalid parameter to -v\n");
+        exit(-1);
+    }
     readLogLines(devices);
 }
 
 void MobileLogController::JrdLogcat::stop() {
 
+}
+
+int MobileLogController::JrdLogcat::setLogFormat(const char * formatString) {
+    static AndroidLogPrintFormat format;
+
+    format = android_log_formatFromString(formatString);
+
+    if (format == FORMAT_OFF) {
+        // FORMAT_OFF means invalid string
+        return -1;
+    }
+
+    android_log_setPrintFormat(g_logformat, format);
+
+    return 0;
 }
 
 void MobileLogController::JrdLogcat::readLogLines(log_device_t* paradevices) {
@@ -282,108 +315,47 @@ void MobileLogController::JrdLogcat::readLogLines(log_device_t* paradevices) {
     int result;
     fd_set readset;
 
-    for (dev=paradevices; dev; dev = dev->next) {
-        if (dev->fd > max) {
-            max = dev->fd;
-        }
-    }
-
     while (1) {
-        do {
-            timeval timeout = { 0, 5000 /* 5ms */ }; // If we oversleep it's ok, i.e. ignore EINTR.
-            FD_ZERO(&readset);
-            for (dev=paradevices; dev; dev = dev->next) {
-                FD_SET(dev->fd, &readset);
-            }
-            result = select(max + 1, &readset, NULL, NULL, sleep ? NULL : &timeout);
-        } while (result == -1 && errno == EINTR);
+        struct log_msg log_msg;
+        int ret = android_logger_list_read(logger_list, &log_msg);
 
-        if (result >= 0) {
-            for (dev=paradevices; dev; dev = dev->next) {
-                if (FD_ISSET(dev->fd, &readset)) {
-                    queued_entry_t* entry = new queued_entry_t();
-                    /* NOTE: driver guarantees we read exactly one full entry */
-                    ret = read(dev->fd, entry->buf, LOGGER_ENTRY_MAX_LEN);
-                    if (ret < 0) {
-                        if (errno == EINTR) {
-                            delete entry;
-                            goto next;
-                        }
-                        if (errno == EAGAIN) {
-                            delete entry;
-                            break;
-                        }
-                        perror("logcat read");
-                        exit(EXIT_FAILURE);
-                    }
-                    else if (!ret) {
-                        fprintf(stderr, "read: Unexpected EOF!\n");
-                        exit(EXIT_FAILURE);
-                    }
-                    else if (entry->entry.len != ret - sizeof(struct logger_entry)) {
-                        fprintf(stderr, "read: unexpected length. Expected %d, got %d\n",
-                                entry->entry.len, ret - sizeof(struct logger_entry));
-                        exit(EXIT_FAILURE);
-                    }
+        if (ret == 0) {
+            fprintf(stderr, "read: Unexpected EOF!\n");
+            exit(-1);
+        }
 
-                    entry->entry.msg[entry->entry.len] = '\0';
-
-                    dev->enqueue(entry);
-                    entry_num++;
-                    if (entry_num >= LOG_TRIGGER_WATERLEVEL) {
-                        entry_too_much = true;
-                    }
-                    ++queued_lines;
-                }
+        if (ret < 0) {
+            if (ret == -EAGAIN) {
+                break;
             }
 
-            if (result == 0) {
-                // we did our short timeout trick and there's nothing new
-                // print everything we have and wait for more data
-                sleep = true;
-                while (true) {
-                    chooseFirst(paradevices, &dev);
-                    if (dev == NULL) {
-                        break;
-                    }
-                    printNextEntry(dev);
-                    --queued_lines;
-                }
-            } else {
-                // print all that aren't the last in their list
-                sleep = false;
-                while (true) {
-                    chooseFirst(paradevices, &dev);
-                    if (dev == NULL || dev->queue->next == NULL) {
-                        if (entry_too_much) {
-                            trigger_log(dev);
-                        } else {
-                            break;
-                        }
-                    }
+            if (ret == -EIO) {
+                fprintf(stderr, "read: Unexpected EOF!\n");
+                exit(-1);
+            }
+            if (ret == -EINVAL) {
+                fprintf(stderr, "read: unexpected length.\n");
+                exit(-1);
+            }
+            perror("logcat read failure");
+            exit(-1);
+        }
 
-                    printNextEntry(dev);
-                    --queued_lines;
-                }
+        for(dev = devices; dev; dev = dev->next) {
+            if (android_name_to_log_id(dev->device) == log_msg.id()) {
+                break;
             }
         }
-next:
-        ;
-    }
-}
-
-void MobileLogController::JrdLogcat::chooseFirst(log_device_t* dev, log_device_t** firstdev) {
-    for (*firstdev = NULL; dev != NULL; dev = dev->next) {
-        if (dev->queue != NULL && (*firstdev == NULL || cmp(dev->queue, (*firstdev)->queue) < 0)) {
-            *firstdev = dev;
+        if (!dev) {
+            fprintf(stderr, "read: Unexpected log ID!\n");
+            exit(-1);
         }
+
+        maybePrintStart(dev);
+        processBuffer(dev, &log_msg);
+
     }
 }
-
-int MobileLogController::JrdLogcat::openLogFile (char *pathname) {
-    return open(pathname, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
-}
-
 
 void MobileLogController::JrdLogcat::rotateLogs(int dev_log)
 {
@@ -428,33 +400,14 @@ void MobileLogController::JrdLogcat::rotateLogs(int dev_log)
 
 }
 
-void MobileLogController::JrdLogcat::skipNextEntry(log_device_t* dev) {
-    maybePrintStart(dev);
-    queued_entry_t* entry = dev->queue;
-    dev->queue = entry->next;
-    delete entry;
-    entry_num--;
-    if(entry_num < LOG_TRIGGER_WATERLEVEL) {
-        entry_too_much = false;
-    }
-}
-
-void MobileLogController::JrdLogcat::processBuffer(log_device_t* dev, logger_entry *buf)
-{
+void MobileLogController::JrdLogcat::processBuffer(log_device_t* dev, struct log_msg *buf) {
     int bytesWritten = 0;
     int err;
     AndroidLogEntry entry;
     char binaryMsgBuf[1024];
 	int index = dev->devType;
 
-    if (dev->binary) {
-        err = android_log_processBinaryLogBuffer(buf, &entry, g_eventTagMap,
-                binaryMsgBuf, sizeof(binaryMsgBuf));
-        //printf(">>> pri=%d len=%d msg='%s'\n",
-        //    entry.priority, entry.messageLen, entry.message);
-    } else {
-        err = android_log_processLogBuffer(buf, &entry);
-    }
+    err = android_log_processLogBuffer(&buf->entry_v1, &entry);
     if (err < 0) {
         goto error;
     }
@@ -489,41 +442,6 @@ error:
     return;
 }
 
-void MobileLogController::JrdLogcat::printNextEntry(log_device_t* dev) {
-    maybePrintStart(dev);
-    processBuffer(dev, &dev->queue->entry);
-    skipNextEntry(dev);
-}
-
-/*
- * Trigger Log when there are too many entries in memory
- */
-void MobileLogController::JrdLogcat::constructEntry(queued_entry_t* entry){
-    char trigger_tag[] = {"AEE"};
-    char trigger_message[] = {"trigger log"};
-
-    struct timeval now;
-    gettimeofday(&now, NULL);
-    entry->entry.len = 1 + sizeof(trigger_tag) + sizeof(trigger_message);
-    entry->entry.pid = 0;
-    entry->entry.tid = 0;
-    entry->entry.msg[0] = 0x5;
-    memcpy(entry->buf + sizeof(logger_entry) + 1, trigger_tag, sizeof(trigger_tag));
-    memcpy(entry->buf + sizeof(logger_entry) + sizeof(trigger_tag) + 1, trigger_message, sizeof(trigger_message));
-    entry->entry.sec = now.tv_sec;
-    entry->entry.nsec = now.tv_usec * 1000;
-}
-
-void MobileLogController::JrdLogcat::trigger_log(log_device_t *dev) {
-    queued_entry_t* entry = new queued_entry_t();
-    constructEntry(entry);
-    dev->enqueue(entry);
-    entry_num++;
-    if (entry_num >= LOG_TRIGGER_WATERLEVEL) {
-        entry_too_much = true;
-    }
-}
-
 void MobileLogController::JrdLogcat::maybePrintStart(log_device_t* dev) {
     if (!dev->printed) {
         dev->printed = true;
@@ -536,5 +454,9 @@ void MobileLogController::JrdLogcat::maybePrintStart(log_device_t* dev) {
             }
         }
     }
+}
+
+int MobileLogController::JrdLogcat::openLogFile (char *pathname) {
+    return open(pathname, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
 }
 

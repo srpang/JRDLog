@@ -15,25 +15,28 @@
 
 #include "cutils/log.h"
 
-#include "CommandListener.h"
-
+//#include "CommandListener.h"
+#include "MobileLogController.h"
 
 int main()
 {
-    CommandListener *cl;
-
+    //CommandListener *cl;
+    MobileLogController *mlc;
     signal(SIGPIPE, exit);
 
-    cl = new CommandListener();
-
+    //cl = new CommandListener();
+    mlc = new MobileLogController();
     /*
      * Now that we're up, we can respond to commands
      */
+    /*
     if (cl->startListener()) {
         ALOGE("Unable to start CommandListener (%s)", strerror(errno));
         exit(1);
     }
-
+    */
+    ALOGI("JrdLogd start logging");
+    mlc->startMobileLogging();
     // Eventually we'll become the monitoring thread
     while(1) {
         sleep(1000);
