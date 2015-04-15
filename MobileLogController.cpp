@@ -561,6 +561,7 @@ void MobileLogController::JrdLogcat::processKernelBuffer() {
         ret = write(g_kernelOutFD, buffer, n);
     } while (ret < 0 && errno == EINTR);
 
+    free(buffer);
     if (ret < 0) {
         fprintf(stderr, "+++ LOG: write failed (errno=%d)\n", errno);
         ret = 0;
