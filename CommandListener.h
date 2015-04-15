@@ -26,13 +26,13 @@
 class CommandListener : public FrameworkListener {
 
 public:
-	static MobileLogController *sMobileLogCtrl;
+    static MobileLogController *sMobileLogCtrl;
 
     CommandListener();
     virtual ~CommandListener() {}
 
 private:
-			  	
+                  
     class MobileLogCommand : public FrameworkCommand {
     public:
         MobileLogCommand(const char *cmd);

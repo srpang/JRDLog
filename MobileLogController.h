@@ -53,7 +53,7 @@ struct log_device_t {
     struct logger_list *logger_list;
     bool printed;
     char label;
-	DeviceType devType;
+    DeviceType devType;
 
     log_device_t* next;
 
@@ -61,7 +61,7 @@ struct log_device_t {
         device = d;
         binary = b;
         label = l;
-		devType = index;
+        devType = index;
         next = NULL;
         printed = false;
     }
@@ -69,65 +69,73 @@ struct log_device_t {
 
 class MobileLogController {
 public:
-	class JrdLogcat {
+    class JrdLogcat {
     public:
         static const char* logArray[];
-		log_device_t* devices = NULL;
-		AndroidLogFormat * g_logformat;
-		EventTagMap* g_eventTagMap = NULL;
+        log_device_t* devices = NULL;
+        AndroidLogFormat * g_logformat;
+        EventTagMap* g_eventTagMap = NULL;
 
-		struct logger_list *logger_list;
-		int g_devCount;
-		char * g_outputFileName[MAX_DEV_LOG_TYPE];
-		int g_logRotateSizeKBytes[MAX_DEV_LOG_TYPE];
-		int g_maxRotatedLogs[MAX_DEV_LOG_TYPE];
+        struct logger_list *logger_list;
+        int g_devCount;
+        char * g_outputFileName[MAX_DEV_LOG_TYPE];
+        int g_logRotateSizeKBytes[MAX_DEV_LOG_TYPE];
+        int g_maxRotatedLogs[MAX_DEV_LOG_TYPE];
 
-		int g_outFD[MAX_DEV_LOG_TYPE] = {-1};
-		off_t g_outByteCount[MAX_DEV_LOG_TYPE] = {0};
+        int g_outFD[MAX_DEV_LOG_TYPE] = {-1};
+        off_t g_outByteCount[MAX_DEV_LOG_TYPE] = {0};
+
+        char * g_kernelOutputFileName;
+        int g_kernelLogRotateSizeKBytes;
+        int g_kernelMaxRotatedLogs;
+        int g_kernelOutFD = -1;
+        off_t g_kernelOutByteCount = 0;
 
         JrdLogcat();
         virtual ~JrdLogcat() {}
-		
-		void start();
-		void stop();
+        
+        void start();
+        void stop();
 
-	private:
+    private:
 
         int setLogFormat(const char * formatString);
 
-		void readLogLines(log_device_t* devices);
-		
+        void readLogLines(log_device_t* devices);
+        
 
-		void trigger_log(log_device_t *dev);
-		void maybePrintStart(log_device_t *dev);
-		void processBuffer(log_device_t* dev, struct log_msg *buf);
-		void rotateLogs(int dev_log);
-		int openLogFile (char *pathname);
+        void trigger_log(log_device_t *dev);
+        void maybePrintStart(log_device_t *dev);
+        void processBuffer(log_device_t* dev, struct log_msg *buf);
+        void processKernelBuffer();
+        void rotateLogs(int dev_log);
+        void rotateKernelLogs();
+        int openLogFile (char *pathname);
     };
 private:
 
-	static JrdLogcat* sJrdLogcatCtrl;
-	static const char* deviceArray[];
-	pid_t mLoggingPid;
-	int   mLoggingFd;
+    static JrdLogcat* sJrdLogcatCtrl;
+    static const char* deviceArray[];
+    pid_t mLoggingPid;
+    int   mLoggingFd;
 
 public:
 
     MobileLogController();
     virtual ~MobileLogController();
 
-	bool setMobileLogPath();
-	bool isLoggingStarted();
-	bool startMobileLogging();
-	bool stopMobileLogging();
+    bool setMobileLogPath();
+    bool isLoggingStarted();
+    bool startMobileLogging();
+    bool stopMobileLogging();
 
 private:
-	bool setDevices();
-	bool openDevices();
-	void closeDevices();
-	bool setupOutput();
-	void clearOutput();
-	int openLogFile (char *pathname);
+    bool setDevices();
+    bool openDevices();
+    void closeDevices();
+    bool setupOutput();
+    void clearOutput();
+    int openLogFile (char *pathname);
 
 
 };

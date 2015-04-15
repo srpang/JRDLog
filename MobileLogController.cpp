@@ -23,6 +23,7 @@
 #include <log/event_tag_map.h>
 #include <netinet/in.h>
 #include <string.h>
+#include <sys/klog.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -36,6 +37,8 @@
 #define DEFAULT_LOG_ROTATE_SIZE_KBYTES 10240
 #define DEFAULT_MAX_ROTATED_LOGS 4
 
+#define FALLBACK_KLOG_BUF_SHIFT    17    /* CONFIG_LOG_BUF_SHIFT from our kernel */
+#define FALLBACK_KLOG_BUF_LEN    (1 << FALLBACK_KLOG_BUF_SHIFT)
 
 const char * MobileLogController::deviceArray[] = {"main", "system", "radio", "events"};
 const char * MobileLogController::JrdLogcat::logArray[] = {"main_log", "sys_log", "radio_log", "events_log"};
@@ -54,13 +57,13 @@ bool MobileLogController::startMobileLogging() {
     pid_t pid;
     int pipefd[2];
 
-	if (mLoggingPid != 0) {
+    if (mLoggingPid != 0) {
         ALOGE("MobileLogging already started");
         errno = EBUSY;
         return false;
     }
 
-	ALOGD("Starting MobileLogging");
+    ALOGD("Starting MobileLogging");
     if (sJrdLogcatCtrl->devices == NULL) {
         if (!setDevices())
             return false;
@@ -97,8 +100,8 @@ bool MobileLogController::startMobileLogging() {
             }
             close(pipefd[0]);
         }
-		
-		sJrdLogcatCtrl->start();
+        
+        sJrdLogcatCtrl->start();
     } else {
         close(pipefd[0]);
         mLoggingPid = pid;
@@ -106,16 +109,16 @@ bool MobileLogController::startMobileLogging() {
 
         ALOGD("MobileLogging Thread running");
 
-		return true;
+        return true;
     }
 
     return true;
 }
 
 bool MobileLogController::stopMobileLogging() {
-	closeDevices();
-	clearOutput();
-	
+    closeDevices();
+    clearOutput();
+    
     if (mLoggingPid == 0) {
         ALOGE("MobileLogging already stopped");
         return false;
@@ -210,53 +213,85 @@ void MobileLogController::closeDevices() {
 bool MobileLogController::setupOutput() {
     struct stat statbuf;
     time_t now = time(NULL);
-	char date[80] = {0};
+    char date[80] = {0};
     int index;
     strftime(date, sizeof(date), "%Y_%m%d_%H_%M_%S", localtime(&now));
+    char* buf = NULL;
 
-	for (index=0; index<MAX_DEV_LOG_TYPE; index++) {
-		char* buf = (char*) malloc(strlen(LOG_FILE_DIR) + strlen("/APLog_") + strlen(date) + strlen("/")
-		                                                + strlen(sJrdLogcatCtrl->logArray[index]) + 1);
-		strcpy(buf, LOG_FILE_DIR);
-		strcat(buf, "/APLog_");
-		strcat(buf, date);
-		strcat(buf, "/");
-		strcat(buf, sJrdLogcatCtrl->logArray[index]);
+    for (index=0; index<MAX_DEV_LOG_TYPE; index++) {
+        buf = (char*) malloc(strlen(LOG_FILE_DIR) + strlen("/APLog_") + strlen(date) + strlen("/")
+                                                        + strlen(sJrdLogcatCtrl->logArray[index]) + 1);
+        strcpy(buf, LOG_FILE_DIR);
+        //strcat(buf, "/APLog_");
+        //strcat(buf, date);
+        strcat(buf, "/");
+        strcat(buf, sJrdLogcatCtrl->logArray[index]);
 
-		sJrdLogcatCtrl->g_outputFileName[index] = buf;
+        sJrdLogcatCtrl->g_outputFileName[index] = buf;
 
-	    sJrdLogcatCtrl->g_outFD[index] = openLogFile (sJrdLogcatCtrl->g_outputFileName[index]);
+        sJrdLogcatCtrl->g_outFD[index] = openLogFile (sJrdLogcatCtrl->g_outputFileName[index]);
 
-	    if (sJrdLogcatCtrl->g_outFD[index] < 0) {
-	        perror ("couldn't open output file");
-	        return false;
-	    }
+        if (sJrdLogcatCtrl->g_outFD[index] < 0) {
+            perror ("couldn't open output file");
+            return false;
+        }
 
-	    fstat(sJrdLogcatCtrl->g_outFD[index], &statbuf);
+        fstat(sJrdLogcatCtrl->g_outFD[index], &statbuf);
 
-	    sJrdLogcatCtrl->g_outByteCount[index] = statbuf.st_size;
-		
-	}
+        sJrdLogcatCtrl->g_outByteCount[index] = statbuf.st_size;
+        
+    }
+
+    //set Kernel info
+    buf = (char*) malloc(strlen(LOG_FILE_DIR) + strlen("/APLog_") + strlen(date) + strlen("/")
+                                                                  + strlen("kernel_log") + 1);
+    strcpy(buf, LOG_FILE_DIR);
+    //strcat(buf, "/APLog_");
+    //strcat(buf, date);
+    strcat(buf, "/");
+    strcat(buf, "kernel_log");
+    sJrdLogcatCtrl->g_kernelOutputFileName = buf;
+    sJrdLogcatCtrl->g_kernelOutFD = openLogFile(sJrdLogcatCtrl->g_kernelOutputFileName);
+    if (sJrdLogcatCtrl->g_kernelOutFD < 0) {
+        perror ("couldn't open kernel output file");
+        return false;
+    }
+    fstat(sJrdLogcatCtrl->g_kernelOutFD, &statbuf);
+    sJrdLogcatCtrl->g_kernelOutByteCount = statbuf.st_size;
 
     return true;
 }
 
 void MobileLogController::clearOutput() {
-	int index;
+    int index;
 
-	for (index=0; index<MAX_DEV_LOG_TYPE; index++) {
+    for (index=0; index<MAX_DEV_LOG_TYPE; index++) {
         if (sJrdLogcatCtrl->g_outputFileName[index] != NULL) {
-		    free(sJrdLogcatCtrl->g_outputFileName[index]);
+            free(sJrdLogcatCtrl->g_outputFileName[index]);
             sJrdLogcatCtrl->g_outputFileName[index] = NULL;
         }
 
         if (sJrdLogcatCtrl->g_outFD[index] != -1) {
-    		close(sJrdLogcatCtrl->g_outFD[index]);
+            close(sJrdLogcatCtrl->g_outFD[index]);
             sJrdLogcatCtrl->g_outFD[index] = -1;
         }
 
-		sJrdLogcatCtrl->g_outByteCount[index] = 0;
-	}
+        sJrdLogcatCtrl->g_outByteCount[index] = 0;
+    }
+
+    //set kernel info
+    if (sJrdLogcatCtrl->g_kernelOutputFileName != NULL) {
+        free(sJrdLogcatCtrl->g_kernelOutputFileName);
+        sJrdLogcatCtrl->g_kernelOutputFileName = NULL;
+    }
+
+    if (sJrdLogcatCtrl->g_kernelOutFD != -1) {
+        close(sJrdLogcatCtrl->g_kernelOutFD);
+        sJrdLogcatCtrl->g_kernelOutFD = -1;
+    }
+
+    sJrdLogcatCtrl->g_kernelOutByteCount = 0;
+    
 }
 
 int MobileLogController::openLogFile (char *pathname) {
@@ -264,17 +299,23 @@ int MobileLogController::openLogFile (char *pathname) {
 }
 
 MobileLogController::JrdLogcat::JrdLogcat(){
-	int index;
-	
-	for (index=0; index<MAX_DEV_LOG_TYPE; index++) {
-	    g_logRotateSizeKBytes[index] = DEFAULT_LOG_ROTATE_SIZE_KBYTES;
-	    g_maxRotatedLogs[index] = DEFAULT_MAX_ROTATED_LOGS;
-	    g_outputFileName[index] = NULL;
-	}
+    int index;
+    
+    for (index=0; index<MAX_DEV_LOG_TYPE; index++) {
+        g_logRotateSizeKBytes[index] = DEFAULT_LOG_ROTATE_SIZE_KBYTES;
+        g_maxRotatedLogs[index] = DEFAULT_MAX_ROTATED_LOGS;
+        g_outputFileName[index] = NULL;
+    }
 
     logger_list = NULL;
     g_devCount = 0;
     g_logformat = android_log_format_new();
+
+    //set Kernel info
+    g_kernelLogRotateSizeKBytes = DEFAULT_LOG_ROTATE_SIZE_KBYTES;
+    g_kernelMaxRotatedLogs = DEFAULT_MAX_ROTATED_LOGS;
+    g_kernelOutputFileName = NULL;
+    
 }
 
 void MobileLogController::JrdLogcat::start() {
@@ -353,6 +394,7 @@ void MobileLogController::JrdLogcat::readLogLines(log_device_t* paradevices) {
 
         maybePrintStart(dev);
         processBuffer(dev, &log_msg);
+        processKernelBuffer();
 
     }
 }
@@ -400,12 +442,55 @@ void MobileLogController::JrdLogcat::rotateLogs(int dev_log)
 
 }
 
+void MobileLogController::JrdLogcat::rotateKernelLogs()
+{
+    int err;
+
+    // Can't rotate logs if we're not outputting to a file
+    if (g_kernelOutputFileName == NULL) {
+        return;
+    }
+
+    close(g_kernelOutFD);
+
+    for (int i = g_kernelMaxRotatedLogs ; i > 0 ; i--) {
+        char *file0, *file1;
+
+        asprintf(&file1, "%s.%d", g_kernelOutputFileName, i);
+
+        if (i - 1 == 0) {
+            asprintf(&file0, "%s", g_kernelOutputFileName);
+        } else {
+            asprintf(&file0, "%s.%d", g_kernelOutputFileName, i - 1);
+        }
+
+        err = rename (file0, file1);
+
+        if (err < 0 && errno != ENOENT) {
+            perror("while rotating log files");
+        }
+
+        free(file1);
+        free(file0);
+    }
+
+    g_kernelOutFD = openLogFile(g_kernelOutputFileName);
+
+    if (g_kernelOutFD < 0) {
+        perror ("couldn't open output file");
+        exit(-1);
+    }
+
+    g_kernelOutByteCount = 0;
+
+}
+
 void MobileLogController::JrdLogcat::processBuffer(log_device_t* dev, struct log_msg *buf) {
     int bytesWritten = 0;
     int err;
     AndroidLogEntry entry;
     char binaryMsgBuf[1024];
-	int index = dev->devType;
+    int index = dev->devType;
 
     err = android_log_processLogBuffer(&buf->entry_v1, &entry);
     if (err < 0) {
@@ -440,6 +525,60 @@ void MobileLogController::JrdLogcat::processBuffer(log_device_t* dev, struct log
 error:
     //fprintf (stderr, "Error processing record\n");
     return;
+}
+
+void MobileLogController::JrdLogcat::processKernelBuffer() {
+    char *buffer;
+    int ret;
+    int n, op, klog_buf_len;
+
+    klog_buf_len = klogctl(KLOG_SIZE_BUFFER, 0, 0);
+
+    if (klog_buf_len <= 0) {
+        klog_buf_len = FALLBACK_KLOG_BUF_LEN;
+    }
+
+    buffer = (char *)malloc(klog_buf_len + 1);
+
+    if (!buffer) {
+        perror("malloc");
+        exit(-1);
+    }
+
+    op = KLOG_READ_ALL;
+
+    n = klogctl(op, buffer, klog_buf_len);
+    if (n < 0) {
+        perror("klogctl");
+        exit(-1);
+    }
+    buffer[n] = '\0';
+
+    op = KLOG_READ_CLEAR;
+    klogctl(op, buffer, klog_buf_len);
+
+    do {
+        ret = write(g_kernelOutFD, buffer, n);
+    } while (ret < 0 && errno == EINTR);
+
+    if (ret < 0) {
+        fprintf(stderr, "+++ LOG: write failed (errno=%d)\n", errno);
+        ret = 0;
+        exit(-1);
+    }
+
+    if (ret < n) {
+        fprintf(stderr, "+++ LOG: write partial (%d of %d)\n", ret,
+                (int)n);
+        exit(-1);
+    }
+
+    g_kernelOutByteCount += ret;
+
+    if (g_kernelLogRotateSizeKBytes > 0 && (g_kernelOutByteCount / 1024) >= g_kernelLogRotateSizeKBytes) {
+        rotateKernelLogs();
+    }   
+
 }
 
 void MobileLogController::JrdLogcat::maybePrintStart(log_device_t* dev) {
