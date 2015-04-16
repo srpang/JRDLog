@@ -152,20 +152,24 @@ bool MobileLogController::setDevices() {
     }
 
     for (i=0; i<arry_size; i++) {
+        bool binary = false;
         char* buf = (char*) malloc(strlen(LOG_DEVICE_DIR) + strlen(deviceArray[i]) + 1);
         strcpy(buf, LOG_DEVICE_DIR);
         strcat(buf, deviceArray[i]);
 
-        needBinary = strcmp(deviceArray[i], "events") == 0;
+        binary = strcmp(deviceArray[i], "events") == 0;
+        if (binary) {
+            needBinary = true;
+        }
 
         if (sJrdLogcatCtrl->devices) {
             dev = sJrdLogcatCtrl->devices;
             while (dev->next) {
                 dev = dev->next;
             }
-            dev->next = new log_device_t(buf, needBinary, * (deviceArray[i] + 0), (DeviceType)i);
+            dev->next = new log_device_t(buf, binary, * (deviceArray[i] + 0), (DeviceType)i);
         } else {
-            sJrdLogcatCtrl->devices = new log_device_t(buf, needBinary, * (deviceArray[i] + 0), (DeviceType)i);
+            sJrdLogcatCtrl->devices = new log_device_t(buf, binary, * (deviceArray[i] + 0), (DeviceType)i);
         }
         sJrdLogcatCtrl->g_devCount++;
     }
@@ -492,7 +496,17 @@ void MobileLogController::JrdLogcat::processBuffer(log_device_t* dev, struct log
     char binaryMsgBuf[1024];
     int index = dev->devType;
 
-    err = android_log_processLogBuffer(&buf->entry_v1, &entry);
+    if (dev->binary) {
+        err = android_log_processBinaryLogBuffer(&buf->entry_v1, &entry,
+                                                 g_eventTagMap,
+                                                 binaryMsgBuf,
+                                                 sizeof(binaryMsgBuf));
+        //printf(">>> pri=%d len=%d msg='%s'\n",
+        //    entry.priority, entry.messageLen, entry.message);
+    } else {
+        err = android_log_processLogBuffer(&buf->entry_v1, &entry);
+    }
+
     if (err < 0) {
         goto error;
     }
