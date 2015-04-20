@@ -32,7 +32,6 @@
 #include <ctype.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-#include <arpa/inet.h>
 #include <cutils/properties.h>
 
 #define LOG_TRIGGER_WATERLEVEL 10000
@@ -136,6 +135,6 @@ private:
     bool setupOutput();
     void clearOutput();
     int openLogFile (char *pathname);
-
+	int create_dir(const char * path);
 
 };

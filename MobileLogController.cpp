@@ -15,13 +15,12 @@
  */
 
 #include <stdlib.h>
-#include <arpa/inet.h>
+#include <stdio.h>
 #include <cutils/log.h>
 #include <cutils/properties.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <log/event_tag_map.h>
-#include <netinet/in.h>
 #include <string.h>
 #include <sys/klog.h>
 #include <sys/socket.h>
@@ -214,20 +213,29 @@ void MobileLogController::closeDevices() {
         sJrdLogcatCtrl->logger_list = NULL;
     }
 }
+
 bool MobileLogController::setupOutput() {
     struct stat statbuf;
     time_t now = time(NULL);
     char date[80] = {0};
+    char dir_path[255] = {0};
     int index;
     strftime(date, sizeof(date), "%Y_%m%d_%H_%M_%S", localtime(&now));
     char* buf = NULL;
 
+    strcpy(dir_path, LOG_FILE_DIR);
+    strcat(dir_path, "/APLog_");
+    strcat(dir_path, date);
+
+    if (create_dir(dir_path) != 0) {
+        perror ("couldn't create the output directory");
+        return false;
+    }
+
     for (index=0; index<MAX_DEV_LOG_TYPE; index++) {
-        buf = (char*) malloc(strlen(LOG_FILE_DIR) + strlen("/APLog_") + strlen(date) + strlen("/")
-                                                        + strlen(sJrdLogcatCtrl->logArray[index]) + 1);
-        strcpy(buf, LOG_FILE_DIR);
-        //strcat(buf, "/APLog_");
-        //strcat(buf, date);
+        buf = (char*) malloc(strlen(dir_path) + strlen("/")
+                                              + strlen(sJrdLogcatCtrl->logArray[index]) + 1);
+        strcpy(buf, dir_path);
         strcat(buf, "/");
         strcat(buf, sJrdLogcatCtrl->logArray[index]);
 
@@ -247,11 +255,9 @@ bool MobileLogController::setupOutput() {
     }
 
     //set Kernel info
-    buf = (char*) malloc(strlen(LOG_FILE_DIR) + strlen("/APLog_") + strlen(date) + strlen("/")
-                                                                  + strlen("kernel_log") + 1);
-    strcpy(buf, LOG_FILE_DIR);
-    //strcat(buf, "/APLog_");
-    //strcat(buf, date);
+    buf = (char*) malloc(strlen(dir_path) + strlen("/")
+                                          + strlen("kernel_log") + 1);
+    strcpy(buf, dir_path);
     strcat(buf, "/");
     strcat(buf, "kernel_log");
     sJrdLogcatCtrl->g_kernelOutputFileName = buf;
@@ -300,6 +306,36 @@ void MobileLogController::clearOutput() {
 
 int MobileLogController::openLogFile (char *pathname) {
     return open(pathname, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
+}
+
+int MobileLogController::create_dir(const char * path) {
+    int i = 0;
+    int ret = -1;
+    char dir_name[256];
+    mode_t mode = S_IRWXU | S_IRWXG | S_IROTH | S_IWOTH;
+    mode_t oldmod = umask(0);
+    int len = strlen(path);
+
+    strcpy(dir_name,path);
+    if(dir_name[len-1] != '/')
+        strcat(dir_name,"/");
+
+    len = strlen(dir_name);
+    for(i = 1; i < len; i++){
+        if(dir_name[i] == '/'){
+            dir_name[i] = 0;
+            if((ret = access(dir_name, F_OK | R_OK)) != 0){
+                if(mkdir(dir_name, mode) != 0){
+                    ALOGE("make %s failed: %d %s\n", dir_name, errno, strerror(errno));
+                    umask(oldmod);
+                    return -1;
+                }
+            }
+            dir_name[i] = '/';
+        }
+    }
+    umask(oldmod);
+    return 0;
 }
 
 MobileLogController::JrdLogcat::JrdLogcat(){
@@ -559,17 +595,13 @@ void MobileLogController::JrdLogcat::processKernelBuffer() {
         exit(-1);
     }
 
-    op = KLOG_READ_ALL;
-
+    op = KLOG_READ_CLEAR;
     n = klogctl(op, buffer, klog_buf_len);
     if (n < 0) {
         perror("klogctl");
         exit(-1);
     }
     buffer[n] = '\0';
-
-    op = KLOG_READ_CLEAR;
-    klogctl(op, buffer, klog_buf_len);
 
     do {
         ret = write(g_kernelOutFD, buffer, n);
