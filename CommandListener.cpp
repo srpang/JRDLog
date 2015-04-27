@@ -50,6 +50,8 @@ int CommandListener::MobileLogCommand::runCommand(SocketClient *cli,
                                                       int argc, char **argv) {
     int rc = 0;
 
+    ALOGD("MobileLogCommand runCommand argc %d, argv1 %s", argc, argv[1]);
+
     if (argc < 2) {
         cli->sendMsg(ResponseCode::CommandSyntaxError, "Missing argument", false);
         return 0;
