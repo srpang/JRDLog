@@ -33,6 +33,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <cutils/properties.h>
+#include <utils/threads.h>
 
 #define LOG_TRIGGER_WATERLEVEL 10000
 typedef enum {
@@ -70,6 +71,7 @@ class MobileLogController {
 public:
     class JrdLogcat {
     public:
+		MobileLogController* baseControl;
         static const char* logArray[];
         log_device_t* devices = NULL;
         AndroidLogFormat * g_logformat;
@@ -90,7 +92,7 @@ public:
         int g_kernelOutFD = -1;
         off_t g_kernelOutByteCount = 0;
 
-        JrdLogcat();
+        JrdLogcat(MobileLogController* obj);
         virtual ~JrdLogcat() {}
         
         void start();
@@ -115,9 +117,9 @@ private:
 
     static JrdLogcat* sJrdLogcatCtrl;
     static const char* deviceArray[];
-    pid_t mLoggingPid;
-    int   mLoggingFd;
 
+	pthread_t mLoggingThread;
+	bool mLogEnable;
 public:
 
     MobileLogController();
@@ -134,7 +136,8 @@ private:
     void closeDevices();
     bool setupOutput();
     void clearOutput();
-    int openLogFile (char *pathname);
+	static void *threadStart(void *obj);
+	int openLogFile (char *pathname);
 	int create_dir(const char * path);
 
 };

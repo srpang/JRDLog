@@ -45,7 +45,9 @@ const char * MobileLogController::JrdLogcat::logArray[] = {"main_log", "sys_log"
 MobileLogController::JrdLogcat* MobileLogController::sJrdLogcatCtrl = NULL;
 
 MobileLogController::MobileLogController() {
-    sJrdLogcatCtrl = new JrdLogcat();
+    sJrdLogcatCtrl = new JrdLogcat(this);
+    mLoggingThread = 0;
+    mLogEnable = false;
 }
 
 MobileLogController::~MobileLogController() {
@@ -53,10 +55,8 @@ MobileLogController::~MobileLogController() {
 }
 
 bool MobileLogController::startMobileLogging() {
-    pid_t pid;
-    int pipefd[2];
 
-    if (mLoggingPid != 0) {
+    if (mLoggingThread != 0) {
         ALOGE("MobileLogging already started");
         errno = EBUSY;
         return false;
@@ -74,69 +74,49 @@ bool MobileLogController::startMobileLogging() {
     if (!setupOutput())
         return false;
 
-    if (pipe(pipefd) < 0) {
-        ALOGE("pipe failed (%s)", strerror(errno));
+    mLogEnable = true;
+    if (pthread_create(&mLoggingThread, NULL, threadStart, this)) {
+        ALOGE("pthread_create (%s)", strerror(errno));
         return false;
-    }
-
-    /*
-     * TODO: Create a monitoring thread to handle and restart
-     * the daemon if it exits prematurely
-     */
-    if ((pid = fork()) < 0) {
-        ALOGE("fork failed (%s)", strerror(errno));
-        close(pipefd[0]);
-        close(pipefd[1]);
-        return false;
-    }
-
-    if (!pid) {
-        close(pipefd[1]);
-        if (pipefd[0] != STDIN_FILENO) {
-            if (dup2(pipefd[0], STDIN_FILENO) != STDIN_FILENO) {
-                ALOGE("dup2 failed (%s)", strerror(errno));
-                return false;
-            }
-            close(pipefd[0]);
-        }
-        
-        sJrdLogcatCtrl->start();
-    } else {
-        close(pipefd[0]);
-        mLoggingPid = pid;
-        mLoggingFd  = pipefd[1];
-
-        ALOGD("MobileLogging Thread running");
-
-        return true;
     }
 
     return true;
 }
 
 bool MobileLogController::stopMobileLogging() {
+
     closeDevices();
     clearOutput();
-    
-    if (mLoggingPid == 0) {
-        ALOGE("MobileLogging already stopped");
-        return false;
+
+    if (mLoggingThread == 0) {
+        ALOGE("Thread already stopped");
+        return true;
     }
 
     ALOGD("Stopping MobileLogging thread");
+    mLogEnable = false;
+    void *ret;
+    if (pthread_join(mLoggingThread, &ret)) {
+        ALOGE("Error joining to listener thread (%s)", strerror(errno));
+        mLoggingThread = 0;
+        return false;
+    }
 
-    kill(mLoggingPid, SIGTERM);
-    waitpid(mLoggingPid, NULL, 0);
-    mLoggingPid = 0;
-    close(mLoggingFd);
-    mLoggingFd = -1;
-    ALOGD("MobileLogging thread stopped");
+    mLoggingThread = 0;
     return true;
 }
 
 bool MobileLogController::isLoggingStarted() {
-    //fix me
-    return false;
+    ALOGE("mLoggingThread %d", mLoggingThread);
+    return (mLoggingThread != 0);
+}
+
+void *MobileLogController::threadStart(void *obj) {
+    MobileLogController *me = reinterpret_cast<MobileLogController *>(obj);
+
+    me->sJrdLogcatCtrl->start();
+    pthread_exit(NULL);
+    return NULL;
 }
 
 bool MobileLogController::setDevices() {
@@ -338,9 +318,9 @@ int MobileLogController::create_dir(const char * path) {
     return 0;
 }
 
-MobileLogController::JrdLogcat::JrdLogcat(){
+MobileLogController::JrdLogcat::JrdLogcat(MobileLogController* obj){
     int index;
-    
+    baseControl = obj;
     for (index=0; index<MAX_DEV_LOG_TYPE; index++) {
         g_logRotateSizeKBytes[index] = DEFAULT_LOG_ROTATE_SIZE_KBYTES;
         g_maxRotatedLogs[index] = DEFAULT_MAX_ROTATED_LOGS;
@@ -398,6 +378,11 @@ void MobileLogController::JrdLogcat::readLogLines(log_device_t* paradevices) {
 
     while (1) {
         struct log_msg log_msg;
+
+        if (baseControl->mLogEnable == false) {
+            break;
+        }
+        
         int ret = android_logger_list_read(logger_list, &log_msg);
 
         if (ret == 0) {
