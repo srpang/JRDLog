@@ -35,11 +35,15 @@
 
 MobileLogController *CommandListener::sMobileLogCtrl = NULL;
 
+int ResponseCode::resMobileLogStatus = ResponseCode::ActionInitiated;
+int ResponseCode::resModemLogStatus = ResponseCode::ActionInitiated;
+int ResponseCode::resNetLogStatus = ResponseCode::ActionInitiated;
+
 CommandListener::CommandListener() :
                  FrameworkListener("jrdlogd", true) {
     registerCmd(new MobileLogCommand("mobilelog"));
     if (!sMobileLogCtrl)
-        sMobileLogCtrl = new MobileLogController();
+        sMobileLogCtrl = new MobileLogController();    
 }
 
 CommandListener::MobileLogCommand::MobileLogCommand(const char *cmd) :
@@ -51,7 +55,8 @@ int CommandListener::MobileLogCommand::runCommand(SocketClient *cli,
     int rc = 0;
 
     ALOGD("MobileLogCommand runCommand argc %d, argv1 %s", argc, argv[1]);
-
+    ResponseCode::resMobileLogStatus = ResponseCode::ActionInitiated;
+ 
     if (argc < 2) {
         cli->sendMsg(ResponseCode::CommandSyntaxError, "Missing argument", false);
         return 0;
@@ -59,18 +64,23 @@ int CommandListener::MobileLogCommand::runCommand(SocketClient *cli,
 
     if (!strcmp(argv[1], "stop")) {    
         rc = sMobileLogCtrl->stopMobileLogging();
+        if (!rc) {
+            cli->sendMsg(ResponseCode::CommandOkay, "Mobilelog stop succeeded", false);
+        } else {
+            cli->sendMsg(ResponseCode::resMobileLogStatus, "Mobilelog stop failed", true);
+        }
     } else if (!strcmp(argv[1], "start")) {
         rc = sMobileLogCtrl->startMobileLogging();
+        if (!rc) {
+            cli->sendMsg(ResponseCode::CommandOkay, "Mobilelog start succeeded", false);
+        } else {
+            cli->sendMsg(ResponseCode::resMobileLogStatus, "Mobilelog start failed", true);
+        }        
     } else {
         cli->sendMsg(ResponseCode::CommandSyntaxError, "Unknown mobilelog cmd", false);
         return 0;
     }
 
-    if (!rc) {
-        cli->sendMsg(ResponseCode::CommandOkay, "Mobilelog operation succeeded", false);
-    } else {
-        cli->sendMsg(ResponseCode::OperationFailed, "Mobilelog operation failed", true);
-    }
 
     return 0;
 } 

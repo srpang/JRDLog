@@ -42,7 +42,9 @@ int main()
         ALOGE("Unable to start CommandListener (%s)", strerror(errno));
         exit(1);
     }
-    ALOGI("JrdLogd start logging");
+
+    //ALOGI("JrdLogd start logging");
+    //cl->sMobileLogCtrl->startMobileLogging();
     //mlc->startMobileLogging();
     // Eventually we'll become the monitoring thread
     while(1) {

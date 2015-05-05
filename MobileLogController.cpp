@@ -30,6 +30,7 @@
 #include <sys/wait.h>
 
 #include "MobileLogController.h"
+#include "ResponseCode.h"
 
 #define LOG_DEVICE_DIR  ""
 #define LOG_FILE_DIR    "/storage/sdcard0/jrdlog/mobilelog"
@@ -59,6 +60,7 @@ bool MobileLogController::startMobileLogging() {
     if (mLoggingThread != 0) {
         ALOGE("MobileLogging already started");
         errno = EBUSY;
+        ResponseCode::resMobileLogStatus = ResponseCode::LogAlreadyStartFailed;
         return false;
     }
 
@@ -77,6 +79,7 @@ bool MobileLogController::startMobileLogging() {
     mLogEnable = true;
     if (pthread_create(&mLoggingThread, NULL, threadStart, this)) {
         ALOGE("pthread_create (%s)", strerror(errno));
+        ResponseCode::resMobileLogStatus = ResponseCode::ThreadStartFailed;
         return false;
     }
 
@@ -98,6 +101,7 @@ bool MobileLogController::stopMobileLogging() {
     void *ret;
     if (pthread_join(mLoggingThread, &ret)) {
         ALOGE("Error joining to listener thread (%s)", strerror(errno));
+        ResponseCode::resMobileLogStatus = ResponseCode::ThreadStopFailed;
         mLoggingThread = 0;
         return false;
     }
@@ -127,6 +131,7 @@ bool MobileLogController::setDevices() {
 
     if (arry_size > MAX_DEV_LOG_TYPE) {
         ALOGE ("device number is not right");
+        ResponseCode::resMobileLogStatus = ResponseCode::ImpossibleFailed;
         return false;
     }
 
@@ -208,7 +213,8 @@ bool MobileLogController::setupOutput() {
     strcat(dir_path, date);
 
     if (create_dir(dir_path) != 0) {
-        perror ("couldn't create the output directory");
+        ALOGE("couldn't create the output directory");
+        ResponseCode::resMobileLogStatus = ResponseCode::FileAccessFailed;
         return false;
     }
 
@@ -223,8 +229,9 @@ bool MobileLogController::setupOutput() {
 
         sJrdLogcatCtrl->g_outFD[index] = openLogFile (sJrdLogcatCtrl->g_outputFileName[index]);
 
-        if (sJrdLogcatCtrl->g_outFD[index] < 0) {
-            perror ("couldn't open output file");
+        if (sJrdLogcatCtrl->g_outFD[index] < 0) {            
+            ALOGE("couldn't open output file");
+            ResponseCode::resMobileLogStatus = ResponseCode::FileOpenFailed;
             return false;
         }
 
@@ -243,7 +250,8 @@ bool MobileLogController::setupOutput() {
     sJrdLogcatCtrl->g_kernelOutputFileName = buf;
     sJrdLogcatCtrl->g_kernelOutFD = openLogFile(sJrdLogcatCtrl->g_kernelOutputFileName);
     if (sJrdLogcatCtrl->g_kernelOutFD < 0) {
-        perror ("couldn't open kernel output file");
+        ALOGE("couldn't open kernel output file");
+        ResponseCode::resMobileLogStatus = ResponseCode::FileOpenFailed;
         return false;
     }
     fstat(sJrdLogcatCtrl->g_kernelOutFD, &statbuf);

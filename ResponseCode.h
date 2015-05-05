@@ -37,10 +37,19 @@ public:
 
     // 500 series - The command was not accepted and the requested
     // action did not take place.
-    static const int CommandSyntaxError = 500;
-    static const int CommandParameterError = 501;
+    static const int CommandSyntaxError        = 500;
+    static const int CommandParameterError     = 501;
 
-    // 600 series - Unsolicited broadcasts
-    static const int InterfaceChange                = 600;
+    // 600 series - self defined errors
+    static const int FileAccessFailed          = 600;
+    static const int FileOpenFailed            = 601;
+    static const int ThreadStartFailed         = 602;
+    static const int ThreadStopFailed          = 602;
+    static const int LogAlreadyStartFailed     = 603;
+
+    static const int ImpossibleFailed          = 700;
+    static int resMobileLogStatus;
+    static int resModemLogStatus;
+    static int resNetLogStatus;
 };
 #endif
