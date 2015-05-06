@@ -34,6 +34,8 @@
 #include "ResponseCode.h"
 
 MobileLogController *CommandListener::sMobileLogCtrl = NULL;
+ModemLogController *CommandListener::sModemLogCtrl = NULL;
+NetLogController *CommandListener::sNetLogCtrl = NULL;
 
 int ResponseCode::resMobileLogStatus = ResponseCode::ActionInitiated;
 int ResponseCode::resModemLogStatus = ResponseCode::ActionInitiated;
@@ -42,8 +44,16 @@ int ResponseCode::resNetLogStatus = ResponseCode::ActionInitiated;
 CommandListener::CommandListener() :
                  FrameworkListener("jrdlogd", true) {
     registerCmd(new MobileLogCommand("mobilelog"));
+    registerCmd(new ModemLogCommand("modemlog"));
+    registerCmd(new NetLogCommand("netlog"));
     if (!sMobileLogCtrl)
-        sMobileLogCtrl = new MobileLogController();    
+        sMobileLogCtrl = new MobileLogController();
+
+    if (!sModemLogCtrl)
+        sModemLogCtrl = new ModemLogController();   
+
+    if (!sMobileLogCtrl)
+        sNetLogCtrl = new NetLogController();   
 }
 
 CommandListener::MobileLogCommand::MobileLogCommand(const char *cmd) :
@@ -84,3 +94,77 @@ int CommandListener::MobileLogCommand::runCommand(SocketClient *cli,
 
     return 0;
 } 
+
+CommandListener::ModemLogCommand::ModemLogCommand(const char *cmd) :
+                 FrameworkCommand(cmd) {
+}
+
+int CommandListener::ModemLogCommand::runCommand(SocketClient *cli,
+                                                      int argc, char **argv) {
+    int rc = 0;
+
+    ALOGD("ModemLogCommand runCommand argc %d, argv1 %s", argc, argv[1]);
+    ResponseCode::resModemLogStatus = ResponseCode::ActionInitiated;
+ 
+    if (!strcmp(argv[1], "stop")) {    
+        rc = sModemLogCtrl->stopModemLogging();
+        if (!rc) {
+            cli->sendMsg(ResponseCode::CommandOkay, "Modemlog stop succeeded", false);
+        } else {
+            cli->sendMsg(ResponseCode::resModemLogStatus, "Modemlog stop failed", true);
+        }
+    } else if (!strcmp(argv[1], "start")) {
+        rc = sModemLogCtrl->startModemLogging();
+        if (!rc) {
+            cli->sendMsg(ResponseCode::CommandOkay, "Modemlog start succeeded", false);
+        } else {
+            cli->sendMsg(ResponseCode::resModemLogStatus, "Modemlog start failed", true);
+        }        
+    } else {
+        cli->sendMsg(ResponseCode::CommandSyntaxError, "Unknown Modemlog cmd", false);
+        return 0;
+    }
+
+    return 0;
+} 
+
+CommandListener::NetLogCommand::NetLogCommand(const char *cmd) :
+                 FrameworkCommand(cmd) {
+}
+
+int CommandListener::NetLogCommand::runCommand(SocketClient *cli,
+                                                      int argc, char **argv) {
+    int rc = 0;
+
+    ALOGD("NetLogCommand runCommand argc %d, argv1 %s", argc, argv[1]);
+    ResponseCode::resNetLogStatus = ResponseCode::ActionInitiated;
+ 
+    if (argc < 2) {
+        cli->sendMsg(ResponseCode::CommandSyntaxError, "Missing argument", false);
+        return 0;
+    }
+
+    if (!strcmp(argv[1], "stop")) {    
+        rc = sNetLogCtrl->stopNetLogging();
+        if (!rc) {
+            cli->sendMsg(ResponseCode::CommandOkay, "Netlog stop succeeded", false);
+        } else {
+            cli->sendMsg(ResponseCode::resNetLogStatus, "Netlog stop failed", true);
+        }
+    } else if (!strcmp(argv[1], "start")) {
+        rc = sNetLogCtrl->startNetLogging();
+        if (!rc) {
+            cli->sendMsg(ResponseCode::CommandOkay, "Netlog start succeeded", false);
+        } else {
+            cli->sendMsg(ResponseCode::resModemLogStatus, "Netlog start failed", true);
+        }        
+    } else {
+        cli->sendMsg(ResponseCode::CommandSyntaxError, "Unknown Netlog cmd", false);
+        return 0;
+    }
+
+
+    return 0;
+} 
+
+

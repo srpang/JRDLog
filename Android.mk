@@ -7,6 +7,8 @@ LOCAL_SRC_FILES:= \
              jrdlogd.cpp \
              CommandListener.cpp \
              MobileLogController.cpp \
+             ModemLogController.cpp \
+             NetLogController.cpp \
              event.logtags \
 
 LOCAL_SHARED_LIBRARIES := \

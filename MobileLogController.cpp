@@ -208,6 +208,7 @@ bool MobileLogController::setupOutput() {
     strftime(date, sizeof(date), "%Y_%m%d_%H_%M_%S", localtime(&now));
     char* buf = NULL;
 
+    //should not exceed 255
     strcpy(dir_path, LOG_FILE_DIR);
     strcat(dir_path, "/APLog_");
     strcat(dir_path, date);

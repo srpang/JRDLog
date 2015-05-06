@@ -22,11 +22,15 @@
 
 #include <sysutils/FrameworkListener.h>
 #include "MobileLogController.h"
+#include "ModemLogController.h"
+#include "NetLogController.h"
 
 class CommandListener : public FrameworkListener {
 
 public:
     static MobileLogController *sMobileLogCtrl;
+    static ModemLogController *sModemLogCtrl;
+    static NetLogController *sNetLogCtrl;
 
     CommandListener();
     virtual ~CommandListener() {}
@@ -40,6 +44,19 @@ private:
         int runCommand(SocketClient *c, int argc, char ** argv);
     };
 
+    class ModemLogCommand : public FrameworkCommand {
+    public:
+        ModemLogCommand(const char *cmd);
+        virtual ~ModemLogCommand() {}
+        int runCommand(SocketClient *c, int argc, char ** argv);
+    };
+
+    class NetLogCommand : public FrameworkCommand {
+    public:
+        NetLogCommand(const char *cmd);
+        virtual ~NetLogCommand() {}
+        int runCommand(SocketClient *c, int argc, char ** argv);
+    };
 };
 
 #endif
