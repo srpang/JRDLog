@@ -52,7 +52,7 @@ CommandListener::CommandListener() :
     if (!sModemLogCtrl)
         sModemLogCtrl = new ModemLogController();   
 
-    if (!sMobileLogCtrl)
+    if (!sNetLogCtrl)
         sNetLogCtrl = new NetLogController();   
 }
 
