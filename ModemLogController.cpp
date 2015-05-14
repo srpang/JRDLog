@@ -54,7 +54,7 @@ bool ModemLogController::startModemLogging() {
     if (mLoggingPid != 0) {
         ALOGE("ModemLogging already started");
         errno = EBUSY;
-        return false;
+        return true;
     }
 
     ALOGD("Starting ModemLogging");
@@ -116,12 +116,10 @@ bool ModemLogController::startModemLogging() {
     return true;
 }
 
-bool ModemLogController::stopModemLogging() {
-    clearOutput();
-    
+bool ModemLogController::stopModemLogging() {   
     if (mLoggingPid == 0) {
         ALOGE("ModemLogging already stopped");
-        return false;
+        return true;
     }
 
     ALOGD("Stopping ModemLogging thread");
@@ -132,6 +130,7 @@ bool ModemLogController::stopModemLogging() {
     close(mLoggingFd);
     mLoggingFd = -1;
     ALOGD("ModemLogging thread stopped");
+    clearOutput();
     return true;
 
 }

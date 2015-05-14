@@ -61,7 +61,7 @@ bool MobileLogController::startMobileLogging() {
         ALOGE("MobileLogging already started");
         errno = EBUSY;
         ResponseCode::resMobileLogStatus = ResponseCode::LogAlreadyStartFailed;
-        return false;
+        return true;
     }
 
     ALOGD("Starting MobileLogging");
@@ -87,10 +87,7 @@ bool MobileLogController::startMobileLogging() {
 }
 
 bool MobileLogController::stopMobileLogging() {
-
-    closeDevices();
-    clearOutput();
-
+    bool result = true;
     if (mLoggingThread == 0) {
         ALOGE("Thread already stopped");
         return true;
@@ -102,12 +99,13 @@ bool MobileLogController::stopMobileLogging() {
     if (pthread_join(mLoggingThread, &ret)) {
         ALOGE("Error joining to listener thread (%s)", strerror(errno));
         ResponseCode::resMobileLogStatus = ResponseCode::ThreadStopFailed;
-        mLoggingThread = 0;
-        return false;
+        result = false;
     }
 
+    closeDevices();
+    clearOutput();
     mLoggingThread = 0;
-    return true;
+    return result;
 }
 
 bool MobileLogController::isLoggingStarted() {

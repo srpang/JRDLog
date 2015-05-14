@@ -27,13 +27,13 @@ public:
 
     // 200 series - Requested action has been successfully completed
     static const int CommandOkay               = 200;
-
+    static const int StartOkay                 = 201;
+    static const int StopOkay                  = 202;
     // 400 series - The command was accepted but the requested action
     // did not take place.
     static const int OperationFailed           = 400;
-    static const int DnsProxyOperationFailed   = 401;
-    static const int ServiceStartFailed        = 402;
-    static const int ServiceStopFailed         = 403;
+    static const int StartFailed               = 401;
+    static const int StopFailed                = 402;
 
     // 500 series - The command was not accepted and the requested
     // action did not take place.

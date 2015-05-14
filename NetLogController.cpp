@@ -54,7 +54,7 @@ bool NetLogController::startNetLogging() {
     if (mLoggingPid != 0) {
         ALOGE("NetLogging already started");
         errno = EBUSY;
-        return false;
+        return true;
     }
 
     ALOGD("Starting NetLogging");
@@ -119,12 +119,10 @@ bool NetLogController::startNetLogging() {
     return true;
 }
 
-bool NetLogController::stopNetLogging() {
-    clearOutput();
-    
+bool NetLogController::stopNetLogging() {   
     if (mLoggingPid == 0) {
         ALOGE("NetLog is already stopped");
-        return false;
+        return true;
     }
 
     ALOGD("Stopping NetLogging thread");
@@ -134,6 +132,7 @@ bool NetLogController::stopNetLogging() {
     mLoggingPid = 0;
     close(mLoggingFd);
     mLoggingFd = -1;
+    clearOutput();
     ALOGD("NetLogging thread stopped");
     return true;
 

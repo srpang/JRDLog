@@ -62,7 +62,7 @@ CommandListener::MobileLogCommand::MobileLogCommand(const char *cmd) :
 
 int CommandListener::MobileLogCommand::runCommand(SocketClient *cli,
                                                       int argc, char **argv) {
-    int rc = 0;
+    bool rc = 0;
 
     ALOGD("MobileLogCommand runCommand argc %d, argv1 %s", argc, argv[1]);
     ResponseCode::resMobileLogStatus = ResponseCode::ActionInitiated;
@@ -74,17 +74,27 @@ int CommandListener::MobileLogCommand::runCommand(SocketClient *cli,
 
     if (!strcmp(argv[1], "stop")) {    
         rc = sMobileLogCtrl->stopMobileLogging();
-        if (!rc) {
-            cli->sendMsg(ResponseCode::CommandOkay, "Mobilelog stop succeeded", false);
+        if (rc) {
+            ALOGD("Mobilelog stop succeeded");  
+            cli->sendMsg(ResponseCode::StopOkay, "Mobilelog stop succeeded", false);
         } else {
-            cli->sendMsg(ResponseCode::resMobileLogStatus, "Mobilelog stop failed", true);
+            char *msg = NULL;
+            ALOGD("Mobilelog stop failed");  
+            asprintf(&msg, "Mobilelog stop failed, reason: %d", ResponseCode::resMobileLogStatus);
+            cli->sendMsg(ResponseCode::StopFailed, msg, true);
+            free(msg);
         }
     } else if (!strcmp(argv[1], "start")) {
         rc = sMobileLogCtrl->startMobileLogging();
-        if (!rc) {
-            cli->sendMsg(ResponseCode::CommandOkay, "Mobilelog start succeeded", false);
+        if (rc) {
+            ALOGD("Mobilelog start succeeded");  
+            cli->sendMsg(ResponseCode::StartOkay, "Mobilelog start succeeded", false);
         } else {
-            cli->sendMsg(ResponseCode::resMobileLogStatus, "Mobilelog start failed", true);
+            char *msg = NULL;
+            ALOGD("Mobilelog start failed");            
+            asprintf(&msg, "Mobilelog start failed, reason: %d", ResponseCode::resMobileLogStatus);
+            cli->sendMsg(ResponseCode::StartFailed, msg, true);
+            free(msg);
         }        
     } else {
         cli->sendMsg(ResponseCode::CommandSyntaxError, "Unknown mobilelog cmd", false);
@@ -101,24 +111,34 @@ CommandListener::ModemLogCommand::ModemLogCommand(const char *cmd) :
 
 int CommandListener::ModemLogCommand::runCommand(SocketClient *cli,
                                                       int argc, char **argv) {
-    int rc = 0;
+    bool rc = 0;
 
     ALOGD("ModemLogCommand runCommand argc %d, argv1 %s", argc, argv[1]);
     ResponseCode::resModemLogStatus = ResponseCode::ActionInitiated;
  
     if (!strcmp(argv[1], "stop")) {    
         rc = sModemLogCtrl->stopModemLogging();
-        if (!rc) {
-            cli->sendMsg(ResponseCode::CommandOkay, "Modemlog stop succeeded", false);
+        if (rc) {
+            ALOGD("Modemlog stop succeeded");
+            cli->sendMsg(ResponseCode::StopOkay, "Modemlog stop succeeded", false);
         } else {
-            cli->sendMsg(ResponseCode::resModemLogStatus, "Modemlog stop failed", true);
+            char *msg = NULL;
+            ALOGD("Modemlog stop failed");            
+            asprintf(&msg, "Modemlog stop failed, reason: %d", ResponseCode::resModemLogStatus);
+            cli->sendMsg(ResponseCode::StopFailed, msg, true);
+            free(msg);        
         }
     } else if (!strcmp(argv[1], "start")) {
         rc = sModemLogCtrl->startModemLogging();
-        if (!rc) {
-            cli->sendMsg(ResponseCode::CommandOkay, "Modemlog start succeeded", false);
+        if (rc) {
+            ALOGD("Modemlog start succeeded");
+            cli->sendMsg(ResponseCode::StartOkay, "Modemlog start succeeded", false);
         } else {
-            cli->sendMsg(ResponseCode::resModemLogStatus, "Modemlog start failed", true);
+            char *msg = NULL;
+            ALOGD("Modemlog start failed");
+            asprintf(&msg, "Modemlog start failed, reason: %d", ResponseCode::resModemLogStatus);
+            cli->sendMsg(ResponseCode::StartFailed, msg, true);
+            free(msg);           
         }        
     } else {
         cli->sendMsg(ResponseCode::CommandSyntaxError, "Unknown Modemlog cmd", false);
@@ -134,7 +154,7 @@ CommandListener::NetLogCommand::NetLogCommand(const char *cmd) :
 
 int CommandListener::NetLogCommand::runCommand(SocketClient *cli,
                                                       int argc, char **argv) {
-    int rc = 0;
+    bool rc = 0;
 
     ALOGD("NetLogCommand runCommand argc %d, argv1 %s", argc, argv[1]);
     ResponseCode::resNetLogStatus = ResponseCode::ActionInitiated;
@@ -146,17 +166,27 @@ int CommandListener::NetLogCommand::runCommand(SocketClient *cli,
 
     if (!strcmp(argv[1], "stop")) {    
         rc = sNetLogCtrl->stopNetLogging();
-        if (!rc) {
-            cli->sendMsg(ResponseCode::CommandOkay, "Netlog stop succeeded", false);
+        if (rc) {
+            ALOGD("Netlog stop succeeded");
+            cli->sendMsg(ResponseCode::StopOkay, "Netlog stop succeeded", false);
         } else {
-            cli->sendMsg(ResponseCode::resNetLogStatus, "Netlog stop failed", true);
+            char *msg = NULL;
+            ALOGD("Netlog stop failed");
+            asprintf(&msg, "Netlog stop failed, reason: %d", ResponseCode::resNetLogStatus);
+            cli->sendMsg(ResponseCode::StopFailed, msg, true);
+            free(msg);   
         }
     } else if (!strcmp(argv[1], "start")) {
         rc = sNetLogCtrl->startNetLogging();
-        if (!rc) {
-            cli->sendMsg(ResponseCode::CommandOkay, "Netlog start succeeded", false);
+        if (rc) {
+            ALOGD("Netlog start succeeded");
+            cli->sendMsg(ResponseCode::StartOkay, "Netlog start succeeded", false);
         } else {
-            cli->sendMsg(ResponseCode::resModemLogStatus, "Netlog start failed", true);
+            char *msg = NULL;
+            ALOGD("Netlog start failed");
+            asprintf(&msg, "Netlog start failed, reason: %d", ResponseCode::resNetLogStatus);
+            cli->sendMsg(ResponseCode::StartFailed, msg, true);
+            free(msg); 
         }        
     } else {
         cli->sendMsg(ResponseCode::CommandSyntaxError, "Unknown Netlog cmd", false);
