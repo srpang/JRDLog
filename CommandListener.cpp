@@ -95,7 +95,14 @@ int CommandListener::MobileLogCommand::runCommand(SocketClient *cli,
             asprintf(&msg, "Mobilelog start failed, reason: %d", ResponseCode::resMobileLogStatus);
             cli->sendMsg(ResponseCode::StartFailed, msg, true);
             free(msg);
-        }        
+        }
+    } else if (!strcmp(argv[1], "getstatus")) {
+        char *msg = NULL;
+        rc = sMobileLogCtrl->isLoggingStarted();
+        ALOGD("Mobilelog is running: %d", rc);   
+        asprintf(&msg, "%s", rc ? "true" : "false");
+        cli->sendMsg(ResponseCode::GetRunningStatusRsp, msg, false);
+        free(msg);
     } else {
         cli->sendMsg(ResponseCode::CommandSyntaxError, "Unknown mobilelog cmd", false);
         return 0;
@@ -139,7 +146,14 @@ int CommandListener::ModemLogCommand::runCommand(SocketClient *cli,
             asprintf(&msg, "Modemlog start failed, reason: %d", ResponseCode::resModemLogStatus);
             cli->sendMsg(ResponseCode::StartFailed, msg, true);
             free(msg);           
-        }        
+        }
+    } else if (!strcmp(argv[1], "getstatus")) {
+        char *msg = NULL;
+        rc = sModemLogCtrl->isLoggingStarted();
+        ALOGD("ModemLog is running: %d", rc);   
+        asprintf(&msg, "%s", rc ? "true" : "false");
+        cli->sendMsg(ResponseCode::GetRunningStatusRsp, msg, false);
+        free(msg);        
     } else {
         cli->sendMsg(ResponseCode::CommandSyntaxError, "Unknown Modemlog cmd", false);
         return 0;
@@ -187,7 +201,14 @@ int CommandListener::NetLogCommand::runCommand(SocketClient *cli,
             asprintf(&msg, "Netlog start failed, reason: %d", ResponseCode::resNetLogStatus);
             cli->sendMsg(ResponseCode::StartFailed, msg, true);
             free(msg); 
-        }        
+        }
+    } else if (!strcmp(argv[1], "getstatus")) {
+        char *msg = NULL;
+        rc = sNetLogCtrl->isLoggingStarted();
+        ALOGD("NetLog is running: %d", rc);   
+        asprintf(&msg, "%s", rc ? "true" : "false");
+        cli->sendMsg(ResponseCode::GetRunningStatusRsp, msg, false);
+        free(msg);         
     } else {
         cli->sendMsg(ResponseCode::CommandSyntaxError, "Unknown Netlog cmd", false);
         return 0;

@@ -29,6 +29,8 @@ public:
     static const int CommandOkay               = 200;
     static const int StartOkay                 = 201;
     static const int StopOkay                  = 202;
+    static const int GetRunningStatusRsp       = 203;
+
     // 400 series - The command was accepted but the requested action
     // did not take place.
     static const int OperationFailed           = 400;
